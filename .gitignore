@@ -5,6 +5,8 @@
 Session.vim
 .netrwhist
 *~
+*.csv
+creds/*.txt
 
 ### SublimeText ###
 # cache files for sublime text
