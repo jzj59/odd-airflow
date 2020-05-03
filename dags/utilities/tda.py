@@ -4,10 +4,37 @@ import time
 from datetime import datetime
 from calendar import timegm
 import pandas
+from utilities.exceptions import ApiError
 
 
 class TDAClient:
+    """
+    Class for accessing TDA API.
 
+    ...
+
+    Attributes
+    ----------
+    client_id : str
+        client ID associated with your TDA developer app
+    access_token: str
+        temporary access token that's generated in order to send authenticated requests to TDA
+    url : str
+        url prefix for API endpoints and API version
+
+    Methods
+    -------
+    get_access_token():
+        Refresh access token. (Best way to use this is to catch an expired access token exception from their API and programatically refresh.)
+    _request(url, authorized=True, method="GET", **kwargs):
+        Internal method for making requests to API.  Handles creating headers, parsing additional arguments, making request, and handling error codes.
+    get_quote(symbol):
+        Fetch current ticker price for a ticker symbol.
+    get_quote_history(symbol, ...):
+        Get entire history for a ticker.  Can pass in date ranges.
+    get_option_chain(symbol, ...)
+        Get current option chain for a ticker.  See method documentation for additional parameters.
+    """
     def __init__(self, client_id):
         # need to initialize with client_id found in developer account settings
         self.client_id = client_id
@@ -15,9 +42,8 @@ class TDAClient:
         self.url = "https://api.tdameritrade.com/v1/"
 
     def get_access_token(self):
-        # implement refresh token method for getting access token
+        """implement refresh token method for getting access token, reliant on an existing access token stored in a /creds/tokeninfo.txt file in the working directory (make sure this gets copied to prod)"""
         # will need to implement method for refreshing refresh token (90 day expiration)
-        # reliant on a tokeninfo.txt containing the refresh token to exist in on-da-dip/tdaclient within the server
 
         cwd = os.getcwd()
         dir = os.path.dirname(cwd)
@@ -61,6 +87,16 @@ class TDAClient:
             print("Unknown error.")
 
     def _request(self, url, authorized=True, method="GET", **kwargs):
+        """
+        Internal generic method for handling requests to TDA endpoints.  This should never need to be called directly by an end user.
+        Helps manage headers for authenticated requests, url construction, parameter construction, and also error handling.
+
+        :param url: TDA endpoint to be concatenated with https://api.tdameritrade.com/v1/marketdata/
+        :param authorized: Make an authenticated vs. unauthenticated request.  Setting this to False allows you to bypass access token step, but will typically return stale data (1 day old).
+        :param method: Possible values are GET and POST right now. Default is GET.
+        :param kwargs: can extend this with additional arguments for the respective endpoints.
+        :return: Response from TDA.
+        """
         endpoint = self.url + "marketdata/" + url
 
         params = {
@@ -82,7 +118,12 @@ class TDAClient:
         if method == "GET":
             result = requests.get(url=endpoint, headers=headers, params=params)
 
-        return result
+            if result.status_code == 200:
+                return result
+            else:
+                raise ApiError(result.status_code)
+        else:
+            raise TypeError("Invalid method.  Please pass either GET or POST.")
 
     def get_quote(self, symbol):
         endpoint = symbol + "/quotes"
@@ -116,27 +157,56 @@ class TDAClient:
         return result
 
     def get_option_chain(self, symbol, contract_type="ALL", include_quotes=False, strike_range="ALL", strategy="SINGLE", option_type="ALL", exp_month="ALL", strike_count=-1):
+        """
+        Method for fetching option chain from TDA.  Returns their option chain object, which the end user will have to traverse to extract key datapoints.
+
+        :param symbol: Ticke symbol.
+        :param contract_type: Supports ALL, PUT, or CALL.  Default is ALL.  This param is case sensitive.
+        :param include_quotes: Whether or not to include underlying quote data. Default is false.
+        :param strike_range: Which strike prices to return. Supports ITM (In-the-money), NTM (Near-the-money), OTM (Out-of-the-money), SAK (Strikes Above Market), SBK (Strikes Below Market), SNK (Strikes Near Market), ALL (All Strikes). Default is ALL.
+        :param strategy: Options strategy (i.e. SINGLE, ANALYTICAL, SPREAD, etc.).  Right now only supports SINGLE.
+        :param option_type: Option type i.e. ALL, S (standard), NS (nonstandard).  Right now only supports ALL.
+        :param exp_month: Expiration month to return, given in all caps and first three letters, i.e. JUN. Also supports ALL. Default is ALL.
+        :param strike_count:  Number of strikes to return above and below at-the-money price.  Default is ignore parameter.
+        :return: JSON blob representing option chain information
+        """
         url = "chains"
 
-        result = self._request(
-            url=url,
-            method="GET",
-            authorized=True,
-            symbol=symbol,
-            contractType=contract_type,
-            includeQuotes=include_quotes,
-            range=strike_range,
-            strategy=strategy,
-            optionType=option_type,
-            expMonth=exp_month,
-            strikeCount=strike_count
-        )
+        if strike_count == -1:
+            result = self._request(
+                url=url,
+                method="GET",
+                authorized=True,
+                symbol=symbol,
+                contractType=contract_type,
+                includeQuotes=include_quotes,
+                range=strike_range,
+                strategy=strategy,
+                optionType=option_type,
+                expMonth=exp_month
+            )
+        else:
+            result = self._request(
+                url=url,
+                method="GET",
+                authorized=True,
+                symbol=symbol,
+                contractType=contract_type,
+                includeQuotes=include_quotes,
+                range=strike_range,
+                strategy=strategy,
+                optionType=option_type,
+                expMonth=exp_month,
+                strikeCount=strike_count
+            )
 
         return result
 
 
 class OptionChain:
-
+    """
+    Class for representing an option chain object from TDA.  Consists of some high level attributes, in combination with a dictionary where each key is an expiration date representing an OptionSubChain class.
+    """
     def __init__(self, symbol, strategy, contract_type):
         self.symbol = symbol
         self.strategy = strategy
@@ -162,6 +232,9 @@ class OptionChain:
 
 
 class OptionSubChain:
+    """
+    Class representing a series of contracts at multiple strikes prices, for a given expiration date.  A contract at a specific strike price can be represented by an OptionContract class.
+    """
 
     def __init__(self, expiration_date, expiration_dict):
         self.expiration_dict = expiration_dict
@@ -183,6 +256,9 @@ class OptionSubChain:
 
 
 class OptionContract:
+    """
+    A set of data representing a contract at a given strike and expiration.  Example fields include price, bids, volatility, etc.
+    """
 
     def __init__(self, strike_price, data):
         self.strike_price = strike_price
