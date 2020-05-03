@@ -2,6 +2,7 @@ from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from datetime import datetime, timedelta
 from options.helpers.get_option_chain import fetch_and_land_option_data
+from airflow.operators.email_operator import EmailOperator
 
 
 default_args = {
@@ -21,12 +22,25 @@ default_args = {
 
 dag = DAG("options", default_args=default_args, schedule_interval=timedelta(1))
 
-fetch_and_land_option_data = PythonOperator(
-    task_id='fetch_and_land_option_data',
-    python_callable=fetch_and_land_option_data,
-    dag=dag,
-    op_kwargs={
-        "symbol": "USO",
-        "client_id": "SZKIIQY0STUI4WGFAQCVLOBJANB61M0H"
-    }
+email = EmailOperator(
+        task_id='send_email',
+        to='jasonzjea@gmail.com',
+        subject='Successful Run for Options DAG.',
+        html_content=""" <h3>Yay!</h3> """,
+        dag=dag
 )
+
+ticker_list = ['USO', 'APRN']
+for symbol in ticker_list:
+    option_tasks = PythonOperator(
+        task_id=f"{symbol}_options",
+        python_callable=fetch_and_land_option_data,
+        dag=dag,
+        op_kwargs={
+            "symbol": symbol,
+            "client_id": "SZKIIQY0STUI4WGFAQCVLOBJANB61M0H"
+        }
+    )
+
+    option_tasks >> email
+
