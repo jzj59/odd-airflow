@@ -25,5 +25,8 @@ fetch_and_land_option_data = PythonOperator(
     task_id='fetch_and_land_option_data',
     python_callable=fetch_and_land_option_data,
     dag=dag,
-    op_kwargs={"symbol": "USO"}
+    op_kwargs={
+        "symbol": "USO",
+        "client_id": "SZKIIQY0STUI4WGFAQCVLOBJANB61M0H"
+    }
 )

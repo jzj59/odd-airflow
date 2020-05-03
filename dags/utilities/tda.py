@@ -206,6 +206,13 @@ class TDAClient:
 class OptionChain:
     """
     Class for representing an option chain object from TDA.  Consists of some high level attributes, in combination with a dictionary where each key is an expiration date representing an OptionSubChain class.
+
+    Attributes
+    ----------
+    symbol: ticker symbol
+    strategy: only support single
+    contract_type: either PUT or CALL
+    chain: an ExpDateMap dictionary from TDA. Every key is an expiration date where the values are another set of dictionaries. The second level dictionary has keys representing strike prices where the values are information about the specific contract.
     """
     def __init__(self, symbol, strategy, contract_type):
         self.symbol = symbol
@@ -214,6 +221,10 @@ class OptionChain:
         self.chain = None
 
     def unpack(self):
+        """
+        This is the primary function users will interact with.  If an ExpDateMap has been attached to the chain attribute, unpack() will traverse the nested dictionaries and convert to a denormalized dataframe.
+        :return: Dataframe where data has been denormalized to represent all data at every expiration and strike combination.
+        """
         if self.chain:
             chain_data = self.chain
             first_value = chain_data[list(chain_data.keys())[0]]
@@ -233,7 +244,8 @@ class OptionChain:
 
 class OptionSubChain:
     """
-    Class representing a series of contracts at multiple strikes prices, for a given expiration date.  A contract at a specific strike price can be represented by an OptionContract class.
+    Internal class representing a series of contracts at multiple strikes prices, for a given expiration date.  A contract at a specific strike price can be represented by an OptionContract class.
+    The primary purpose of this class is to make unpacking the overall option chain object a little easier for the OptionChain class.  There's almost no reason to every directly access this class.
     """
 
     def __init__(self, expiration_date, expiration_dict):
@@ -258,6 +270,7 @@ class OptionSubChain:
 class OptionContract:
     """
     A set of data representing a contract at a given strike and expiration.  Example fields include price, bids, volatility, etc.
+    The primary purpose of this class is to make unpacking the overall option chain object a little easier for the OptionChain class.  There's almost no reason to every directly access this class.
     """
 
     def __init__(self, strike_price, data):

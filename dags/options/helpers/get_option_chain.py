@@ -4,8 +4,19 @@ from datetime import datetime
 from airflow.models import Variable
 
 
-def fetch_and_land_option_data(symbol):
-    client = tda.TDAClient("SZKIIQY0STUI4WGFAQCVLOBJANB61M0H")
+def fetch_and_land_option_data(symbol, client_id):
+    """
+    Initialize a TDAClient class using JJ's TDA developer account.
+    -> fetch option chain object from TDA for a given symbol.
+    -> traverse {}ExpDateMap keys in TDA, i.e. callExpDateMap (contains a hierarchy of all calls at a given expiration and strike price, in that order)
+    -> turn lowest level dictionary in a ExpDateMap (a contract for a given symbol, expiration, and strike) into a dataframe
+    -> bind all the data together
+    -> write data to s3
+    :param symbol:
+    :param client_id:
+    :return:
+    """
+    client = tda.TDAClient(client_id)
     client.get_access_token()
 
     chain = client.get_option_chain(symbol=symbol)
