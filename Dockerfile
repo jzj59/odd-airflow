@@ -1,11 +1,11 @@
 # VERSION 1.10.9
-# AUTHOR: Matthieu "Puckel_" Roisil
-# DESCRIPTION: Basic Airflow container
+# AUTHOR: Jason Jea
+# DESCRIPTION: Basic Airflow container plus Python dependencies
 # BUILD: docker build --rm -t puckel/docker-airflow .
 # SOURCE: https://github.com/puckel/docker-airflow
 
 FROM python:3.7-slim-buster
-LABEL maintainer="Puckel_"
+LABEL maintainer="jzj59"
 
 # Never prompt the user for choices on installation/configuration of packages
 ENV DEBIAN_FRONTEND noninteractive
@@ -73,8 +73,14 @@ RUN set -ex \
         /usr/share/doc \
         /usr/share/doc-base
 
+COPY requirements/requirements.txt /requirements.txt
+RUN pip install pip -U -r ./requirements.txt
+
 COPY script/entrypoint.sh /entrypoint.sh
 COPY config/airflow.cfg ${AIRFLOW_USER_HOME}/airflow.cfg
+COPY include ${AIRFLOW_USER_HOME}/include
+COPY creds /usr/local/creds
+RUN chmod 777 -R /usr/local/creds
 
 RUN chown -R airflow: ${AIRFLOW_USER_HOME}
 
