@@ -4,7 +4,10 @@ import time
 from datetime import datetime
 from calendar import timegm
 import pandas
+import boto3
+import io
 from utilities.exceptions import ApiError
+from airflow.models import Variable
 
 
 class TDAClient:
@@ -45,11 +48,18 @@ class TDAClient:
         """implement refresh token method for getting access token, reliant on an existing access token stored in a /creds/tokeninfo.txt file in the working directory (make sure this gets copied to prod)"""
         # will need to implement method for refreshing refresh token (90 day expiration)
 
-        cwd = os.getcwd()
-        dir = os.path.dirname(cwd)
-        refresh_token_file = open(dir + "/creds/tokeninfo.txt", "r")
-        refresh_token = refresh_token_file.readline()
-        refresh_token_file.close()
+        aws_access_key = Variable.get("aws_access_key_id")
+        aws_secret_key = Variable.get("aws_secret_access_key")
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key
+        )
+
+        bytes_buffer = io.BytesIO()
+        s3_client.download_fileobj(Bucket="on-da-dip", Key="tokeninfo.txt", Fileobj=bytes_buffer)
+        byte_value = bytes_buffer.getvalue()
+        refresh_token = byte_value.decode()
 
         endpoint = self.url + "oauth2/token"
         grant_type = "refresh_token"
@@ -74,6 +84,8 @@ class TDAClient:
             # need to update token file with latest refresh token
             refresh_token_file.write(result_body["refresh_token"])
             refresh_token_file.close()
+
+            s3_client.upload_file(Filename=dir + "/creds/tokeninfo.txt", Bucket="on-da-dip", Key="tokeninfo.txt")
 
         elif result.status_code == 401:
             print("Invalid credentials.")
